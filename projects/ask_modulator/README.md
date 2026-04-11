@@ -1,130 +1,126 @@
-#ASK Modulator
+# ask_modulator
 
-This project implements a mixed-signal Digital-to-Analog communication system using the Shrike-Lite board. It leverages the RP2040 as a Control Plane (Data/Protocol) and the ForgeFPGA as a Data Plane (Direct Digital Synthesis & PWM).
+**Difficulty:** Advanced
 
-The system generates a smooth Sine Wave using DDS (Direct Digital Synthesis), converts it to a digital bitstream using PWM, and modulates it using Amplitude Shift Keying (ASK) commands from the RP2040.
+**Uses MCU:** Yes
 
-To understand the working principle of DDS and PWM audio generation, refer to:
-[FPGA DDS Tutorial](https://www.fpga4fun.com/DDS.html).
+**External Hardware:** RC Filter (1 kΩ Resistor, 10 nF Capacitor), Oscilloscope (optional)
 
----
+## Overview
 
-## Block Diagram
-```mermaid
-    graph LR
-        A[RP2040 MCU] -- 6-Bit Frequency Bus --> B[FPGA Input GPIO]
-        A -- Data/Enable Signal --> B
-        B -- Tuning Word --> C[DDS Logic]
-        C -- Sine Value --> D[PWM Generator]
-        D -- Digital Pulses --> E[FPGA Output Pin]
-        E -- RC Filter --> F[Analog Scope/Audio]
-```
-## Overview on FPGA Side
-The FPGA logic (`dds_ask_modulator`) acts as a high-speed synthesizer consisting of three main stages:
+This example implements a mixed-signal Digital-to-Analog communication system using the Shrike board. The FPGA generates a sine wave using Direct Digital Synthesis (DDS), converts it into a PWM signal, and modulates it using Amplitude Shift Keying (ASK) controlled by the RP2040. You will learn DDS, PWM-based DAC techniques, and FPGA–MCU co-design for communication systems.
 
-1.  **Phase Accumulator:** A 16-bit counter that increments by a specific "Tuning Word" value every clock cycle. The speed of the overflow determines the carrier frequency.
-2.  **Sine Look-Up Table (LUT):** A 64-entry ROM that maps the phase value to a digital amplitude (0 to 63), creating a sine wave shape.
-3.  **PWM Generator:** Converts the 6-bit amplitude into a 1-bit high-speed Pulse Width Modulated signal (approx 780 kHz switching rate) suitable for RC filtering.
+## Compatibility
 
-The modulation is performed logically at the output stage:
-- If `i_data` is High: The generated Sine Wave is passed to the output.
-- If `i_data` is Low: The output is forced to 0 (Silence).
+| Board                | Firmware                | Status     |
+| -------------------- | ----------------------- | ---------- |
+| Shrike-Lite (RP2040) | `firmware/micropython/` | ✅ Tested   |
+| Shrike (RP2350)      | `firmware/micropython/` | ✅ Tested   |
+| Shrike-fi (ESP32-S3) | `firmware/micropython/` | ⬜ Untested |
 
----
-
-## Features
-- **Direct Digital Synthesis (DDS):** Generates mathematically precise sine waves without external DAC chips.
-- **Hybrid Architecture:** Offloads fast signal generation (50 MHz logic) to FPGA, keeping the MCU free for text processing and timing.
-- **Configurable Carrier:** A 6-bit parallel bus allows the RP2040 to tune the carrier frequency instantly.
-- **ASK (Amplitude Shift Keying):** Implements On-Off Keying (OOK) to transmit binary data bursts.
-- **Custom Encoding:** Implements a custom 6-bit character map for alphanumeric transmission over the ASK link.
-
----
-
-## Top Module Interface
-
-| Signal | Direction | Description |
-| :--- | :--- | :--- |
-| `i_clk` | In | System clock (50 MHz Internal Oscillator) |
-| `i_freq_word[5:0]` | In | 6-Bit Tuning Word (Controls Carrier Pitch) |
-| `i_data` | In | Modulation Signal (1=Carrier ON, 0=Silence) |
-| `o_pwm_out` | Out | PWM Digital Output (Requires Filter) |
-| `o_pwm_out_oe` | Out | Output Enable (Always 1) |
-| `o_clk_en` | Out | Oscillator Enable (Always 1) |
-
----
-
-## Parameters & Math
-#### `CLK_FREQ :` 
-- System clock frequency.
-    - `50 MHz`
-#### `PWM CARRIER :` 
-- The PWM switching frequency is derived from the clock and the resolution ($2^6$).
-    - `50 MHz / 64 steps ≈ 781.25 kHz`
-#### `OUTPUT FREQUENCY :`
-- The audible output frequency is determined by the Tuning Word ($TW$) sent by the RP2040.
-    - $F_{out} = \frac{F_{clk} \times TW}{2^{16}}$
-    - With $TW=1$, Output $\approx 762 \text{ Hz}$ (Optimal for filtering).
-
----
+> FPGA bitstream is the same across all boards.
 
 ## Hardware Setup
-### 1. The RC Filter (Demodulator)
-The FPGA output is a digital square wave. To see the sine wave on an oscilloscope, an RC Low Pass Filter is required to reconstruct the analog signal.
 
-*   **Resistor:** 1 kΩ
-*   **Capacitor:** 10 nF (Code 103) - *Cutoff ~15.9 kHz*
-*   **Connection:** Connect Resistor to FPGA Output. Connect Capacitor from Resistor leg to Ground. Probe the junction between R and C.
+### RC Filter (Required for Analog Output)
 
-### 2. Pin Interconnects (Jumper Wires)
-Due to pin availability on the specific package, a mixed-header wiring scheme is used. Ensure **Common Ground** between headers.
+The FPGA outputs a high-frequency PWM signal. An RC low-pass filter is required to reconstruct the analog sine wave.
 
-| Signal | RP2040 Pin | FPGA Pin (Board Label) | Physical Pin (Bitstream) |
-| :--- | :--- | :--- | :--- |
-| **Freq Bit 0 (LSB)** | **GPIO 5** | **FPGA_IO1** | **PIN 14** |
-| **Freq Bit 1** | **GPIO 6** | **FPGA_IO2** | **PIN 15** |
-| **Freq Bit 2** | **GPIO 7** | **FPGA_IO17** | **PIN 8** |
-| **Freq Bit 3** | **GPIO 8** | **FPGA_IO18** | **PIN 9** |
-| **Freq Bit 4** | **GPIO 9** | **FPGA_IO8** | **PIN 23** |
-| **Freq Bit 5 (MSB)** | **GPIO 10**| **FPGA_IO9** | **PIN 24** |
-| **Data / Enable** | **GPIO 16**| **FPGA_IO0** | **PIN 13** |
-| **Power Control** | **GPIO 12/13** | *(Internal)* | *(Internal)* |
-| **PWM Output** | *(None)* | **FPGA_IO14** | **PIN 5** |
+* Resistor: 1 kΩ
+* Capacitor: 10 nF (Code 103)
+* Cutoff Frequency: ~15.9 kHz
 
-> **Note:** FPGA Physical Pins refer to the IO Manager mapping in Go Configure.
+**Connection:**
 
----
+* FPGA Output → Resistor → Output Node
+* Capacitor from Output Node → Ground
+* Probe at Output Node
 
-## Firmware Overview
-The control logic is written in **MicroPython** running on the RP2040.
+### Pin Connections
 
-1.  **`flash.py`:** Uses the `shrike` library to write the Verilog bitstream (`.bin`) from the RP2040 filesystem into the FPGA configuration memory.
-2.  **`main.py`:** 
-    *   Initializes the 6-bit Parallel Bus to set the Carrier Frequency.
-    *   Powers up the FPGA Core (GPIO 12) and IOs (GPIO 13).
-    *   Implements a **Custom 6-Bit Look-Up Table** to map characters (A-Z, 0-9) to specific 6-bit integer codes.
-    *   Transmits the string `"HelloShrike123"` by toggling the `i_data` pin (ASK) using a Start-Bit/Stop-Bit protocol.
+| Signal           | RP2040 Pin | FPGA Pin (Board Label) | Physical Pin |
+| ---------------- | ---------- | ---------------------- | ------------ |
+| Freq Bit 0 (LSB) | GPIO 5     | FPGA_IO1               | PIN 14       |
+| Freq Bit 1       | GPIO 6     | FPGA_IO2               | PIN 15       |
+| Freq Bit 2       | GPIO 7     | FPGA_IO17              | PIN 8        |
+| Freq Bit 3       | GPIO 8     | FPGA_IO18              | PIN 9        |
+| Freq Bit 4       | GPIO 9     | FPGA_IO8               | PIN 23       |
+| Freq Bit 5 (MSB) | GPIO 10    | FPGA_IO9               | PIN 24       |
+| Data / Enable    | GPIO 16    | FPGA_IO0               | PIN 13       |
+| PWM Output       | —          | FPGA_IO14              | PIN 5        |
 
-### Exercise for the User
-The current implementation utilizes a custom, optimized 6-bit codebook to map alphanumeric characters to the available bandwidth. 
-**A full standard ASCII (8-bit) implementation requires splitting characters into two 4-bit nibbles or serializing the data further. This implementation is left as an exercise for the reader.**
+> Ensure common ground between RP2040 and FPGA.
 
----
+## Quick Start (Pre-Built Bitstream)
 
-## Quick Steps
-1.  **Synthesize:** Generate the bitstream in Go Configure with the pin map above.
-2.  **Upload:** Copy `FPGA_bitstream_MCU.bin`, `flash.py`, and `helloshrike.py` to the RP2040 via Thonny/VS Code.
-3.  **Flash:** Run `flash.py` once to configure the FPGA.
-4.  **Run:** Run `helloshrike.py` to start the transmission loop.
-5.  **Observe:** Connect Oscilloscope to **FPGA_IO14**. Set Timebase to `50ms/div` and Trigger to `Normal`.
+1. Generate and upload the FPGA bitstream
+2. Copy `flash.py` and `helloshrike.py` to the RP2040
+3. Run `flash.py` once to configure FPGA
+4. Run `helloshrike.py`
+5. Observe PWM output on FPGA_IO14 using an oscilloscope
+
+Expected result: Bursts of sine waves representing transmitted data using ASK modulation
+
+## Build From Source
+
+### FPGA (Verilog)
+
+1. Open project in Go Configure Software Hub
+2. Select FPGA part `SLG47910V (Rev BB)`
+3. Paste Verilog into `main.v`
+4. Configure I/O Planner and generate bitstream
+
+### Firmware (MicroPython)
+
+1. Open `flash.py` and `helloshrike.py` in Thonny
+2. Upload to RP2040
+3. Run scripts
+
+## How It Works
+
+The FPGA implements a DDS-based signal generator with three main components:
+
+1. **Phase Accumulator:**
+   A 16-bit counter incremented by a tuning word each clock cycle. This determines output frequency.
+
+2. **Sine LUT:**
+   A 64-entry lookup table mapping phase to amplitude (0–63), generating a sine waveform.
+
+3. **PWM Generator:**
+   Converts amplitude into a 1-bit PWM signal (~781 kHz switching frequency).
+
+ASK modulation is applied at output:
+
+* `i_data = 1` → sine wave transmitted
+* `i_data = 0` → output forced to zero
+
+The RP2040:
+
+* Sends frequency tuning word (6-bit parallel bus)
+* Controls modulation signal
+* Encodes characters using a custom 6-bit encoding scheme
+
+### Key Equations
+
+* PWM Frequency:
+  `50 MHz / 64 ≈ 781.25 kHz`
+
+* Output Frequency:
+  `F_out = (F_clk × TW) / 2^16`
+
+* Example:
+  `TW = 1 → ~762 Hz`
 
 ## Expected Output
-When running `helloshrike.py`, the oscilloscope will show bursts of Sine Waves corresponding to the logic levels of the transmitted text:
 
-*   **Logic 1:** 3V Sine Wave (Carrier ON)
-*   **Logic 0:** 0V Flat Line (Carrier OFF)
+### Oscilloscope Output
 
-Output on the terminal should look like as shown below:
+* Logic 1 → Sine wave (~3V peak)
+* Logic 0 → Flat line (0V)
+
+Signal appears as bursts of sine waves separated by silence.
+
+### Terminal Output
 
 ```
 --- Transmitting: HelloShrike123 ---
@@ -144,4 +140,10 @@ Sending '2' -> Code 52 -> 110100
 Sending '3' -> Code 53 -> 110101
 ```
 
-The signal will look like a structured sequence of bursts separated by silence, representing the binary data of the text string.
+The waveform corresponds to encoded binary data transmitted via ASK.
+
+## Notes
+
+* Noise on FPGA GPIO inputs may be interpreted as logic high
+* External pull-ups are not strictly required in this setup
+* Full ASCII support can be implemented by extending encoding (exercise for user)

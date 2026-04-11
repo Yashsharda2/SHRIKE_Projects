@@ -1,40 +1,128 @@
-# Using PMOD 7-Segment Display with Shrike
+# seven_seg_clock
 
-This example demostrates use of [PMOD 7-Segment Display module (available from 1BitSquared)](https://1bitsquared.com/products/pmod-7-segment-display) with Shrike.
+**Difficulty:** Intermediate
+
+**Uses MCU:** No
+
+**External Hardware:** PMOD 7-Segment Display
 
 ## Overview
-7-Segment Displays are widely used for FPGA projects. A standard 2-digit 7-Segment PMOD for FPGAs usually doesn’t light all digits at once. The FPGA cycles through each digit very quickly (time-multiplexing) while sharing the same segment lines. The refresh is fast enough that it looks continuous to the human eye.
 
-This example shows how time-multiplexing logic is utilized to implement a counter which goes from 00 to 99 with a 1 second-heartbeat.
+This example demonstrates the use of a [PMOD 7-Segment Display module (available from 1BitSquared)](https://1bitsquared.com/products/pmod-7-segment-display) with Shrike.
 
-## Prerequisite
-1. Need a [2 x 6 female pin right-angled PMOD connector](https://www.digikey.in/en/products/detail/w%C3%BCrth-elektronik/613012243121/16608604) soldered on bottom PMOD pins (3.3V, GND and F8-F15). 
-2. Get the 7-Segment Display PMOD from 1BitSquared or get it fabricated from [source files](https://github.com/icebreaker-fpga/icebreaker-pmod/tree/master/7segment/v1.2a).
-3. Optionally hook a button on FPGA GPIO7 or F7 pin to handle design's inverted reset signal ``rst_n``. 
+7-Segment displays are widely used in FPGA projects. A standard 2-digit 7-segment PMOD does not drive both digits simultaneously. Instead, the FPGA uses **time-multiplexing**, rapidly switching between digits while sharing segment lines. The refresh rate is fast enough to appear continuous to the human eye.
 
+This design implements a **00–99 counter** with a **1-second heartbeat**, demonstrating practical time-multiplexing logic.
 
-## How Design works?
-- FPGA powers up, ``clk`` is system clock of 50 MHz.
-- ``gen_1Hz_tick`` turns that ``clk`` into a 1 Hz pulse ``tick_1Hz``.
-- A state machine ``bcd_two_digit_counter`` uses that tick to count seconds up to 99, then resets.
-- ``time_multiplexing_clock`` creates a fast tick ``tick_195KHz`` to alternate between the two digits.
-- ``seven_segment_decoder_driver``:
-    - Latches ``counter_val`` every second (``buffer_in`` = ``tick_1Hz``).
-    - Rapidly multiplexes digit 0 and digit 1 via ``active_num``.
-    - For each active digit, decodes its BCD nibble into 7-segment pattern.
+## Compatibility
 
-- Net effect on the 7-segment PMOD:
-   - You see a two-digit “seconds” counter incrementing once a second.
-   - The digits are time-multiplexed but appear steady to your eyes.
+| Board                | Firmware                | Status     |
+| -------------------- | ----------------------- | ---------- |
+| Shrike-Lite (RP2040) | `firmware/arduino-ide/` | ✅ Tested   |
+| Shrike (RP2350)      | `firmware/arduino-ide/` | ✅ Tested   |
+| Shrike-fi (ESP32-S3) | `firmware/arduino-ide/` | ⬜ Untested |
+
+> FPGA bitstream is the same across all boards.
+
+## Hardware Setup
+
+### Required Components
+
+1. [2 x 6 female pin right-angled PMOD connector](https://www.digikey.in/en/products/detail/w%C3%BCrth-elektronik/613012243121/16608604)
+2. [PMOD 7-Segment Display module (1BitSquared)](https://1bitsquared.com/products/pmod-7-segment-display)
+
+   * Or fabricate from [source files](https://github.com/icebreaker-fpga/icebreaker-pmod/tree/master/7segment/v1.2a)
+3. Optional: Push button connected to FPGA GPIO7 (F7) for reset (`rst_n`)
+
+### Connection Notes
+
+* Connect PMOD to FPGA PMOD header (3.3V, GND, F8–F15)
+* Ensure correct orientation and soldering of connector
+
+---
+
+## Quick Start (Pre-Built Bitstream)
+
+1. Connect Shrike board via USB
+2. Attach the 7-segment PMOD
+3. Upload `bitstream/seven_segment_pmod_clock.bin` using ShrikeFlash
+4. Expected result: Display shows a counter incrementing from `00` to `99` every second
+
+---
+
+## Build From Source
+
+### FPGA (Verilog)
+
+1. Open `seven_segment_pmod_clock.ffpga` in Go Configure Software Hub
+2. Configure I/O mapping
+3. Click **Synthesize → Generate Bitstream**
+4. Output will be in `ffpga/build/`
+
+### Firmware
+
+No firmware required for this example.
+
+---
+
+## How It Works
+
+The design is composed of multiple modules working together:
+
+* **Clock Source**
+
+  * `clk` = 50 MHz system clock
+
+* **1 Hz Tick Generator**
+
+  * `gen_1Hz_tick` converts system clock to `tick_1Hz`
+
+* **Counter Logic**
+
+  * `bcd_two_digit_counter` increments from 00 → 99
+  * Resets after reaching 99
+
+* **Multiplexing Clock**
+
+  * `time_multiplexing_clock` generates `tick_195KHz`
+  * Used to alternate between digits
+
+* **7-Segment Driver**
+
+  * `seven_segment_decoder_driver`:
+
+    * Latches counter value every second
+    * Alternates active digit using `active_num`
+    * Converts BCD to segment signals
+
+### Key Concept: Time Multiplexing
+
+* Only one digit is active at a time
+* Switching happens at high frequency (~195 kHz)
+* Human eye perceives both digits as continuously lit
+
+---
+
+## Visual Output
 
 <p align="center">
   <img src="./media/board_with_pmod_module.jpg" width="800"/>
 </p>
 <p align="center"><em>Design running on Shrike</em></p>
 
+---
 
-## Note for IO Planner 
-We can also hook design's inverted reset ``rst_n`` to ``FPGA_CORE_READY``
+## Expected Output
 
-## How to flash the FPGA bitstream file
-In ForgeFPGA Workshop hit **FPGA Editor** → **Synthesize** → **Generate Bitstream**. Find the generated bin file in as follows ``/ffpga/build/bitstream/FPGA_bitstream_MCU.bin``. Afterward refer the section [here](https://github.com/vicharak-in/shrike_fpga/blob/main/Docs/getting_started.md#4-flashing-the-bitstream) to flash that binary to FPGA.
+* Display shows values from `00` → `99`
+* Increments once per second
+* Both digits appear continuously ON due to multiplexing
+* After `99`, counter resets to `00`
+
+---
+
+## Notes
+
+* `rst_n` is active-low reset
+* Optional button can be connected to GPIO7 (F7) for reset control
+* Alternatively, `rst_n` can be connected to `FPGA_CORE_READY` in I/O Planner
