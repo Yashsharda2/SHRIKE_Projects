@@ -1,4 +1,4 @@
-# Shrike-Lite ASK Modulator
+#ASK Modulator
 
 This project implements a mixed-signal Digital-to-Analog communication system using the Shrike-Lite board. It leverages the RP2040 as a Control Plane (Data/Protocol) and the ForgeFPGA as a Data Plane (Direct Digital Synthesis & PWM).
 
