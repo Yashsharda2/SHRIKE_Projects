@@ -1,4 +1,4 @@
-# test_cordic.py
+#cordic.py
 # Author: Yash Sharda
 # Interactive test runner for the CORDIC math coprocessor on Shrike Lite.
 # Valid angle range: 0 to 45 degrees.
@@ -44,7 +44,7 @@ def fpga_query(mode, val1, val2=0):
 
     if raw & 0x80:
         raw -= 0x100
-    fpga_val = raw / 64.0
+    fpga_val = raw if mode == "mul" else raw / 64.0
 
     if mode == "sin":
         ref = math.sin(val1)
@@ -53,9 +53,10 @@ def fpga_query(mode, val1, val2=0):
     elif mode == "tan":
         ref = math.tan(val1)
     elif mode == "mul":
-        ref = (val1 * val2) / 64.0
+        ref = float(val1 * val2)
 
     return fpga_val, ref, abs(fpga_val - ref)
+
 
 
 print()

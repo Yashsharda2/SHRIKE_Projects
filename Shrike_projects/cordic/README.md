@@ -56,13 +56,6 @@ cordic.py           MicroPython (RP2040)
 
 Tested with 80 vectors via the MicroPython test across all four modes.
 
-| Mode      | Max Absolute Error |
-|-----------|--------------------|
-| Cosine    | 0.019              |
-| Sine      | 0.019              |
-| Tangent   | 0.071              |
-| Multiply  | 0.000000           |
-
 ---
 
 ## Target Platform
